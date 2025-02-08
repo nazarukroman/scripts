@@ -1,3 +1,5 @@
+wg-autostart:
+	systemctl enable wg-quick@wg0
 wg-status:
 	systemctl status wg-quick@wg0
 wg-restart:
