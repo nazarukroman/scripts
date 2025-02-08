@@ -6,3 +6,5 @@ wg-start:
 	systemctl start wg-quick@wg0
 wg-stop:
 	systemctl stop wg-quick@wg0
+generate-client:
+	.env > ./generate_client.sh

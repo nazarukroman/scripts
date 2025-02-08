@@ -9,9 +9,9 @@ else
 fi
 
 # Set default values if not defined in .env
-DEFAULT_ADDRESS=${DEFAULT_ADDRESS}
+DEFAULT_ADDRESS=$DEFAULT_ADDRESS
 CONFIG_DIR=${CONFIG_DIR:-"$(dirname "$0")"}
-ENDPOINT=${ENDPOINT}
+ENDPOINT=$ENDPOINT
 DNS=${DNS:-"9.9.9.9"}
 WG_SERVER_CONFIG=${WG_SERVER_CONFIG:-"/etc/wireguard/wg0.conf"}
 
