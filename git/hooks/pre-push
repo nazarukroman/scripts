@@ -1,0 +1,110 @@
+#!/bin/bash
+
+# ====== Цветовые коды ======
+RESET="\033[0m"
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+BLUE="\033[0;34m"
+
+# ====== Функции логирования ======
+log_info() {
+  echo -e "${BLUE}[INFO]${RESET} $1"
+}
+
+log_success() {
+  echo -e "${GREEN}[SUCCESS]${RESET} $1"
+}
+
+log_warning() {
+  echo -e "${YELLOW}[WARNING]${RESET} $1"
+}
+
+log_error() {
+  echo -e "${RED}[ERROR]${RESET} $1"
+  exit 1
+}
+
+# ====== Старт хука ======
+log_info "🚀 Pre-push hook started..."
+
+# Определение базового коммита
+REPO_ROOT=$(git rev-parse --show-toplevel)
+PACKAGE_PATH="$REPO_ROOT/package.json"
+DEFAULT_BRANCH="origin/master"
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+BASE_COMMIT=$(git merge-base --fork-point "$DEFAULT_BRANCH" "$CURRENT_BRANCH")
+
+source "$REPO_ROOT"/.env
+
+echo "$WORKSPACE_PREFIX"
+
+if [ -z "$BASE_COMMIT" ]; then
+  BASE_COMMIT=DEFAULT_BRANCH
+fi
+
+log_info "🔍 Текущая ветка: $CURRENT_BRANCH"
+log_info "📌 Базовый коммит: $BASE_COMMIT"
+
+# Получаем измененные файлы
+CHANGED_FILES=$(git diff --name-only "$BASE_COMMIT".."$CURRENT_BRANCH")
+
+if [ -z "$CHANGED_FILES" ]; then
+  log_success "✅ Нет изменений в файлах. Завершаем работу."
+  exit 0
+fi
+
+if [ ! -f "$PACKAGE_PATH" ]; then
+  log_error "Файл package.json не найден!"
+fi
+
+# Получаем список workspaces
+WORKSPACES=$(jq -r '.workspaces[]' "$PACKAGE_PATH")
+
+if [ -z "$WORKSPACES" ]; then
+  log_warning "Workspaces не найдены в package.json. Завершаем работу."
+  exit 0
+fi
+
+MODIFIED_SPACES=()
+
+# Проверяем измененные файлы на принадлежность к workspace
+for WS in $WORKSPACES; do
+  WS_DIR=${WS//\*/}
+
+  for FILE in $CHANGED_FILES; do
+    if [[ $FILE == $WS_DIR* ]]; then
+      MODIFIED_SPACES+=("$WS_DIR")
+      break
+    fi
+  done
+done
+
+# Если изменённых workspace нет — выходим
+if [ ${#MODIFIED_SPACES[@]} -eq 0 ]; then
+  log_success "✅ Нет изменений в воркспейсах. Завершаем работу."
+  exit 0
+fi
+
+# Убираем дубликаты
+UNIQUE_SPACES=($(echo "${MODIFIED_SPACES[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+log_info "🛠  Измененные workspaces:"
+echo "${UNIQUE_SPACES[@]}" | awk '{print "   - " $0}'
+
+for SPACE in "${UNIQUE_SPACES[@]}"; do
+  PREPARED_SPACE="${SPACE##*/}"
+  PREPARED_SPACE="${PREPARED_SPACE//\*/}"
+
+  if [ -n "$WORKSPACE_PREFIX" ]; then
+    PREPARED_SPACE="$WORKSPACE_PREFIX/$PREPARED_SPACE"
+  fi
+
+  log_info "🚀 Запускаем pre-push для $PREPARED_SPACE..."
+  yarn workspace "$PREPARED_SPACE" run pre-push || log_error "Ошибка при запуске pre-push для $PREPARED_SPACE!"
+done
+# Проверка текущей ветки
+yarn run check-branch || log_error "Ошибка при проверке ветки!"
+
+log_success "🎉 Все pre-push успешно выполнены!"
+exit 0
